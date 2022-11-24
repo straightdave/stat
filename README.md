@@ -1,0 +1,2 @@
+# stat
+Simple Statistic Solution
