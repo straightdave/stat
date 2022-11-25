@@ -3,6 +3,8 @@ defmodule StatServer.API do
 
   use Plug.Router
 
+  require Logger
+
   plug(:match)
   plug(:dispatch)
 
@@ -16,7 +18,7 @@ defmodule StatServer.API do
     data
     |> String.split("\n", trim: true)
     |> Enum.map(fn line ->
-      with [name, type, value] when type in ["incre", "gauge"] <-
+      with [name, type, value] when type in ["i", "g"] <-
              String.split(line, ",", trim: true),
            {v, ""} <- Integer.parse(value) do
         [name, type, v]
@@ -25,6 +27,7 @@ defmodule StatServer.API do
       end
     end)
     |> Enum.reject(&(&1 == nil))
+    |> IO.inspect(label: "received")
     |> StatServer.Worker.push()
 
     send_resp(conn, 200, "ok")

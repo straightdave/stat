@@ -8,7 +8,6 @@ defmodule StatClient do
   require Logger
 
   @interval Application.compile_env(:stat_client, :interval, 5_000)
-  @report_fn Application.compile_env(:stat_client, :report_fn, &StatClient.report/1)
 
   # ===================
   # Exposed functions
@@ -35,9 +34,6 @@ defmodule StatClient do
   end
 
   def gauge(_, _), do: :ok
-
-  @doc false
-  def report(_data), do: :ok
 
   # ===================
   # Internal functions
@@ -87,7 +83,7 @@ defmodule StatClient do
         acc
     end)
     |> Map.values()
-    |> @report_fn.()
+    |> report()
 
     # clean up
     :ets.delete(:stat_client, "data")
@@ -101,5 +97,20 @@ defmodule StatClient do
 
       Process.send_after(self(), :tick, @interval)
       {:noreply, state}
+  end
+
+  defp report(data) do
+    Logger.info("reporting ...")
+
+    payload =
+      data
+      |> Enum.map(fn [topic, type, value] ->
+        "#{topic},#{type},#{value}"
+      end)
+      |> Enum.join("\n")
+
+    with {:error, err} <- HTTPoison.post("http://127.0.0.1:4000/data", payload) do
+      Logger.warn(Exception.format(:error, err))
+    end
   end
 end

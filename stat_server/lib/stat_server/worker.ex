@@ -25,34 +25,36 @@ defmodule StatServer.Worker do
   end
 
   @impl true
-  def handle_cast({:push, data}, %{index: index} = state) do
+  def handle_cast({:push, data}, %{index: i} = state) do
     data
     |> Enum.each(fn
-      {name, type, value} when type in ["incre", "gauge"] ->
-        :ets.insert(:worker_ets, {"current", index, name, type, value})
+      [name, type, value] when type in ["i", "g"] ->
+        :ets.insert(:worker_ets, {"current", i, name, type, value}) |> IO.inspect()
 
       _ ->
         nil
     end)
 
-    {:noreply, %{state | index: index + 1}}
+    {:noreply, %{state | index: i + 1}}
   end
 
   @impl true
   def handle_info(:tick, state) do
     data =
       :ets.lookup(:worker_ets, "current")
+      |> IO.inspect(label: "in_ets")
       |> Enum.reduce(%{}, fn
-        {_, _, name, "incre", value}, acc ->
+        {_, _, name, "i", value}, acc ->
           case Map.get(acc, name) do
             nil -> Map.put(acc, name, [name, "i", value])
             v -> Map.put(acc, name, [name, "i", v + value])
           end
 
-        {_, _, name, "gauge", value}, acc ->
+        {_, _, name, "g", value}, acc ->
           Map.put(acc, name, [name, "g", value])
       end)
       |> Map.values()
+      |> IO.inspect(label: "ready_to_enqueue")
 
     state =
       case data do
@@ -63,6 +65,7 @@ defmodule StatServer.Worker do
         data ->
           payload = :erlang.term_to_binary(data)
           Redix.command!(:redix, ["RPUSH", @queue_name, payload])
+          Logger.info("Enqueued")
 
           # clean up
           :ets.delete(:worker_ets, "current")

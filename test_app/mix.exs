@@ -1,9 +1,9 @@
-defmodule StatClient.MixProject do
+defmodule TestApp.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :stat_client,
+      app: :test_app,
       version: "0.1.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
@@ -14,14 +14,15 @@ defmodule StatClient.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      mod: {TestApp.Application, []}
     ]
   end
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:httpoison, "~> 1.8"}
+      {:stat_client, path: "../stat_client"}
     ]
   end
 end
