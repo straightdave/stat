@@ -3,10 +3,17 @@ defmodule StatServer.Sink do
 
   use GenServer
 
+  alias StatServer.Helper
+
   require Logger
 
+  @ets_key "current"
+
   @sink_interval 5_000
-  @queue_name "data_pipe"
+  @sink_script File.read!("priv/lua/sink.lua")
+
+  # Redis zset name
+  @pile_name "data_pile"
 
   # =============================
   # Module's exposed functions
@@ -35,8 +42,12 @@ defmodule StatServer.Sink do
     ets_name = "ets_#{args[:partition]}" |> String.to_atom()
     :ets.new(ets_name, [:named_table])
 
+    uniq = Helper.get_ipv4() || Helper.random_str(4)
+    state = %{index: 0, ets: ets_name, p: args[:partition], uniq: uniq}
+    Logger.info("Sink #{state.p} starts (instance: #{uniq})")
+
     Process.send_after(self(), :tick, 0)
-    {:ok, %{index: 0, ets: ets_name, p: args[:partition]}}
+    {:ok, state}
   end
 
   @impl true
@@ -44,7 +55,7 @@ defmodule StatServer.Sink do
     data
     |> Enum.each(fn
       [name, type, value] when type in ["i", "g"] ->
-        :ets.insert(t, {"current", i, name, type, value}) |> IO.inspect()
+        :ets.insert(t, {@ets_key, i, name, type, value})
 
       _ ->
         nil
@@ -54,9 +65,9 @@ defmodule StatServer.Sink do
   end
 
   @impl true
-  def handle_info(:tick, %{ets: t, p: p} = state) do
+  def handle_info(:tick, %{ets: t} = state) do
     data =
-      :ets.lookup(t, "current")
+      :ets.lookup(t, @ets_key)
       |> Enum.reduce(%{}, fn
         {_, _, name, "i", value}, acc ->
           case Map.get(acc, name) do
@@ -68,21 +79,28 @@ defmodule StatServer.Sink do
           Map.put(acc, name, [name, "g", value])
       end)
       |> Map.values()
-      |> IO.inspect(label: "ready_to_enqueue from #{p}")
 
     state =
       case data do
         [] ->
-          # do nothing
           state
 
         data ->
-          payload = :erlang.term_to_binary(data)
-          Redix.command!(:redix, ["RPUSH", @queue_name, payload])
-          Logger.info("Enqueued from #{p}")
+          # Simple serialization via :erlang.term_to_binary
+          member =
+            {
+              data,
+              # Redis ZSET requires unique members.
+              # There are many sinks in an App instance,
+              # and many instances in a distributed system.
+              # This unique field can be discarded after data's retrieved.
+              "#{state.uniq}_#{state.p}"
+            }
+            |> :erlang.term_to_binary()
 
-          # clean up
-          :ets.delete(t, "current")
+          Redix.command!(:redix, ["EVAL", @sink_script, 1, @pile_name, member])
+
+          :ets.delete(t, @ets_key)
           %{state | index: 0}
       end
 

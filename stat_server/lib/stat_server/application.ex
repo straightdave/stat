@@ -8,13 +8,17 @@ defmodule StatServer.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      {Redix, host: "127.0.0.1", name: :redix},
-      {PartitionSupervisor,
-       child_spec: StatServer.Sink,
-       name: :sinks,
-       with_arguments: fn [args], partition ->
-         [Keyword.put(args, :partition, partition)]
-       end},
+      StatServer.Repo,
+      {Redix, name: :redix},
+      {
+        PartitionSupervisor,
+        child_spec: StatServer.Sink,
+        name: :sinks,
+        with_arguments: fn [args], partition ->
+          [Keyword.put(args, :partition, partition)]
+        end
+      },
+      StatServer.Processor,
       {Plug.Cowboy, scheme: :http, plug: StatServer.API, options: [port: 4000]}
     ]
 

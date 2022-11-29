@@ -27,7 +27,6 @@ defmodule StatServer.API do
       end
     end)
     |> Enum.reject(&(&1 == nil))
-    |> IO.inspect(label: "received")
     |> StatServer.Sink.push()
 
     send_resp(conn, 200, "ok")
