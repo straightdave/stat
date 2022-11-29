@@ -8,18 +8,18 @@ Two apps:
 * client (library)
 
 Also,
-* Queue (Redis, etc.)
+* Data Pile (Redis, etc.)
 * Permanent data storage (Postgres, etc.)
 
 ## Data Pipeline
 
 ```
                                   +-------+
-App (client) ---> StatServer ---> |       |                   +-----+
-                                  |       |                   |     |
-App (client) ---> StatServer ---> | Queue | ---> Merging ---> | DB  |
-                                  |       |    (scheduled)    |     |
-App (client) ---> StatServer ---> |       |                   +-----+
+App (client) ---> StatServer ---> |       |                    +-----+
+                                  |       |                    |     |
+App (client) ---> StatServer ---> | Sink  | ---> cumulate ---> | DB  |
+                                  |       |     (scheduled)    |     |
+App (client) ---> StatServer ---> |       |                    +-----+
                                   +-------+
 ```
 
